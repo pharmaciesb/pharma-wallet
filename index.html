@@ -2,100 +2,96 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner Remise Officine</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <title>Scanner Promo Officine - Mode Douchette</title>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f0f2f5; padding: 10px; margin: 0; }
-        .card { max-width: 450px; margin: 10px auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        #reader { width: 100%; border-radius: 10px; margin-bottom: 15px; }
-        #loader { display: none; color: #007bff; font-weight: bold; padding: 20px; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #eceff1; padding: 40px; }
+        .card { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; background: #e8f5e9; color: #2e7d32; font-size: 0.8rem; margin-bottom: 20px; }
+        #scan-input { position: absolute; left: -9999px; } /* Champ caché pour capturer la douchette */
+        #loader { display: none; margin: 20px; font-weight: bold; color: #007bff; }
         #result-area { display: none; }
-        .barcode-container { background: white; padding: 20px; border: 2px solid #28a745; border-radius: 10px; margin: 15px 0; }
-        svg #barcode { max-width: 100%; }
-        .btn { background: #007bff; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-size: 1rem; cursor: pointer; }
-        .btn-secondary { background: #6c757d; margin-top: 10px; }
+        .barcode-box { background: #f8f9fa; border: 3px solid #28a745; padding: 30px; border-radius: 15px; margin: 20px 0; }
+        .instruction { color: #546e7a; font-size: 1.1rem; }
     </style>
 </head>
-<body>
+<body onclick="focusInput()">
 
 <div class="card">
-    <h2 style="color: #2c3e50; margin-top: 0;">Promo Flash Officine</h2>
+    <div class="status-badge">● Prêt à scanner</div>
+    <h1>Système Remise Flash</h1>
+    <p class="instruction">Flashez le QR code de l'affiche avec votre douchette</p>
     
-    <div id="reader"></div>
+    <input type="text" id="scan-input" autofocus autocomplete="off">
 
-    <div id="loader">Récupération du code...</div>
+    <div id="loader">🔄 Traitement HighCo en cours...</div>
 
     <div id="result-area">
-        <p>Code détecté : <strong id="text-code"></strong></p>
-        <div class="barcode-container">
+        <h2 style="color: #2e7d32;">CODE GÉNÉRÉ : <span id="text-code"></span></h2>
+        <div class="barcode-box">
             <svg id="barcode"></svg>
         </div>
-        <button class="btn" onclick="resetScanner()">Scanner un autre</button>
+        <p style="color: #666;">Scannez ce code avec votre douchette pour appliquer la remise</p>
+        <button onclick="resetApp()" style="margin-top:20px; padding:10px 20px; cursor:pointer;">Scanner un autre</button>
     </div>
 </div>
 
 <script>
-    // Votre URL Cloudflare validée
     const WORKER_URL = "https://solitary-river-bec4.pharmaciesaintbarthelemy.workers.dev/";
-    const html5QrCode = new Html5Qrcode("reader");
+    const input = document.getElementById('scan-input');
 
-    function startScanner() {
-        html5QrCode.start(
-            { facingMode: "environment" }, 
-            { fps: 10, qrbox: 250 },
-            onScanSuccess
-        ).catch(err => console.error("Erreur caméra", err));
-    }
+    // Garder le focus sur l'input en permanence pour la douchette
+    function focusInput() { input.focus(); }
+    document.addEventListener('click', focusInput);
 
-    async function onScanSuccess(decodedText) {
-        // Stopper caméra et montrer loader
-        await html5QrCode.stop();
-        document.getElementById('reader').style.display = 'none';
+    input.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            const scannnedUrl = input.value;
+            if (scannnedUrl.includes('http')) {
+                processUrl(scannnedUrl);
+            }
+            input.value = ''; // On vide pour le suivant
+        }
+    });
+
+    async function processUrl(url) {
         document.getElementById('loader').style.display = 'block';
+        document.getElementById('result-area').style.display = 'none';
 
         try {
-            // Appel à votre Worker
-            const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(decodedText)}`);
+            const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`);
             const data = await response.json();
 
             if (data.code && data.code !== "Non trouvé") {
-                showBarcode(data.code);
+                showResult(data.code);
             } else {
-                alert("Code introuvable sur cette affiche.");
-                resetScanner();
+                alert("Erreur : Impossible d'extraire le code.");
+                resetApp();
             }
         } catch (err) {
             alert("Erreur de connexion au Worker.");
-            resetScanner();
+            resetApp();
         }
     }
 
-    function showBarcode(code) {
+    function showResult(code) {
         document.getElementById('loader').style.display = 'none';
         document.getElementById('result-area').style.display = 'block';
         document.getElementById('text-code').innerText = code;
 
-        // Génère le code-barres exploitable par votre douchette
         JsBarcode("#barcode", code, {
             format: "CODE128",
-            lineColor: "#000",
-            width: 2,
-            height: 80,
+            width: 3,
+            height: 100,
             displayValue: false
         });
     }
 
-    function resetScanner() {
+    function resetApp() {
         document.getElementById('result-area').style.display = 'none';
-        document.getElementById('reader').style.display = 'block';
-        startScanner();
+        document.getElementById('loader').style.display = 'none';
+        input.focus();
     }
-
-    // Lancement automatique au chargement
-    startScanner();
 </script>
-
 </body>
 </html>
