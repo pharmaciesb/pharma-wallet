@@ -52,7 +52,7 @@
     </div>
     <iframe id="highco-view"></iframe>
 </div>
-
+<script>
 // On ajoute la bibliothèque de lecture de QR Code
 const script = document.createElement('script');
 script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
@@ -101,5 +101,6 @@ async function decodeDisplayedQR() {
         addLog("Erreur de capture : " + err.message, "error");
     }
 }
+    </script>
 </body>
 </html>
