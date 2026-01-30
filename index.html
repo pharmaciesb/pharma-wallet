@@ -58,26 +58,28 @@
     });
 
     async function process(url) {
-        document.getElementById('loader').style.display = 'block';
-        document.getElementById('logs').style.display = 'block';
-        document.getElementById('log-step').innerText = "Lecture du lien court...";
-        
-        try {
-            const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`);
-            const data = await response.json();
+    try {
+        const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`);
+        const data = await response.json();
 
-            if (data.code && data.code !== "Code non trouvé") {
-                document.getElementById('log-step').innerHTML = `Lien HighCo trouvé : <br><small>${data.intermediateUrl}</small>`;
-                showFinal(data.code);
-            } else {
-                document.getElementById('log-step').innerText = "Erreur : " + (data.error || "Code non trouvé");
-            }
-        } catch (err) {
-            document.getElementById('log-step').innerText = "Erreur de connexion réseau.";
-        } finally {
-            document.getElementById('loader').style.display = 'none';
+        // ON LOGUE TOUT ICI
+        console.log("--- DEBUG WORKER ---");
+        data.logs.forEach(log => console.log(log));
+        
+        if (data.full_html_opn) {
+            console.log("HTML COMPLET OPN.TO :", data.full_html_opn);
         }
+
+        if (data.code) {
+            showFinal(data.code);
+        } else {
+            console.error("Échec à l'étape :", data.step);
+            if (data.debug_html_final) console.log("HTML FINAL :", data.debug_html_final);
+        }
+    } catch (err) {
+        console.error("Erreur réseau :", err);
     }
+}
 
     function showFinal(code) {
         document.getElementById('result').style.display = 'block';
