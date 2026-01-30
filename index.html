@@ -3,104 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Debug & Extract - Pharma Wallet</title>
+    <title>Scanner Pharma - Mode Expert</title>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; background: #1a1a1a; color: white; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; background: #121212; color: white; overflow: hidden; }
         
-        /* Côté Gauche : Contrôles et Résultats */
-        .panel-left { width: 400px; padding: 20px; border-right: 1px solid #333; display: flex; flex-direction: column; overflow-y: auto; }
-        
-        /* Côté Droit : Vue réelle de la page */
+        .panel-left { width: 420px; padding: 20px; border-right: 1px solid #333; display: flex; flex-direction: column; box-sizing: border-box; background: #1e1e1e; }
         .panel-right { flex-grow: 1; background: #fff; position: relative; }
+        
         iframe { width: 100%; height: 100%; border: none; }
+        
+        .input-group { margin-bottom: 20px; }
+        input { width: 100%; padding: 15px; background: #2d2d2d; border: 2px solid #3d3d3d; color: #00ff00; border-radius: 8px; font-size: 1.1rem; font-family: monospace; box-sizing: border-box; }
+        input:focus { border-color: #007bff; outline: none; }
 
-        .status-box { padding: 10px; border-radius: 5px; margin-bottom: 10px; font-size: 0.8rem; background: #2c2c2c; border-left: 4px solid #007bff; }
-        input { width: 100%; padding: 12px; box-sizing: border-box; background: #333; border: 1px solid #444; color: white; border-radius: 4px; font-size: 1rem; }
-        
-        #result-area { margin-top: 20px; text-align: center; display: none; background: white; color: black; padding: 15px; border-radius: 8px; }
-        #barcode { width: 100%; }
-        
-        .log-line { font-family: monospace; font-size: 0.75rem; margin-bottom: 4px; color: #aaa; border-bottom: 1px solid #222; padding-bottom: 2px; }
-        .log-success { color: #28a745; font-weight: bold; }
-        .log-error { color: #dc3545; }
+        .btn-scan { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 15px; font-size: 1rem; }
+        .btn-scan:hover { background: #0056b3; }
+
+        #result-area { margin-top: 10px; padding: 15px; background: white; color: black; border-radius: 12px; text-align: center; display: none; border: 4px solid #28a745; }
+        #barcode { width: 100%; max-height: 120px; }
+
+        #logs { flex-grow: 1; margin-top: 20px; background: #000; padding: 10px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.75rem; overflow-y: auto; border: 1px solid #333; }
+        .log-line { margin-bottom: 4px; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; }
+        .log-success { color: #28a745; }
+        .log-error { color: #ff4d4d; }
+        .log-info { color: #00d4ff; }
     </style>
 </head>
 <body>
 
 <div class="panel-left">
-    <h3>🔍 Scan & Debug</h3>
-    <input type="text" id="url-input" placeholder="Scannez ici..." autofocus>
-    <button onclick="decodeDisplayedQR()" class="btn">📷 Décoder l'écran</button>
+    <h2>🚀 Pharma Scan V2</h2>
     
-    <div id="status" style="margin-top: 15px;"></div>
+    <div class="input-group">
+        <label style="font-size: 0.8rem; color: #888;">SCANNER OU TAPER CODE :</label>
+        <input type="text" id="main-input" placeholder="Lien ou code HCN..." autofocus>
+    </div>
+
+    <button class="btn-scan" onclick="decodeDisplayedQR()">📷 DÉCODER LE QR À L'ÉCRAN</button>
 
     <div id="result-area">
-        <h2 id="final-code-text"></h2>
+        <div id="code-val" style="font-weight: 900; font-size: 1.4rem; margin-bottom: 5px;"></div>
         <svg id="barcode"></svg>
     </div>
 
-    <div id="logs-container" style="margin-top: 20px;">
-        <div style="font-size: 0.7rem; color: #666; margin-bottom: 5px;">LOGS DU WORKER / PROXY :</div>
-        <div id="logs"></div>
+    <div id="logs">
+        <div class="log-info">[Système] Prêt pour le scan.</div>
     </div>
 </div>
 
 <div class="panel-right">
-    <div id="iframe-placeholder" style="position:absolute; top:45%; left:30%; color:#888;">
-        La page HighCo s'affichera ici après le scan
+    <iframe id="target-frame" name="target-frame"></iframe>
+    <div id="placeholder" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ccc; text-align: center;">
+        L'affiche HighCo apparaîtra ici
     </div>
-    <iframe id="highco-view"></iframe>
 </div>
-<script>
-// On ajoute la bibliothèque de lecture de QR Code
-const script = document.createElement('script');
-script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
-document.head.appendChild(script);
 
-async function decodeDisplayedQR() {
-    addLog("Tentative de lecture visuelle du QR Code...");
-    
-    try {
-        // 1. On demande l'autorisation de capturer l'onglet
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" } });
-        const track = stream.getVideoTracks()[0];
-        const imageCapture = new ImageCapture(track);
-        const bitmap = await imageCapture.grabFrame();
-        
-        // 2. On dessine l'image sur un canvas invisible pour l'analyser
-        const canvas = document.createElement('canvas');
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(bitmap, 0, 0);
-        
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        
-        // 3. Utilisation de jsQR pour trouver le code dans l'image
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
-        
-        if (code) {
-            addLog("QR Code décodé visuellement !", "success");
-            const urlFinal = code.data;
-            addLog("URL extraite : " + urlFinal);
-            
-            // Souvent le HCN est à la fin de cette URL
-            const hcnMatch = urlFinal.match(/HCN[a-zA-Z0-9]+/);
-            if (hcnMatch) {
-                showBarcode(hcnMatch[0]);
-            } else {
-                addLog("URL trouvée mais pas de HCN dedans. Analyse manuelle requise.", "error");
-            }
-        } else {
-            addLog("Aucun QR Code détecté sur l'écran.", "error");
-        }
-        
-        track.stop(); // On arrête la capture
-    } catch (err) {
-        addLog("Erreur de capture : " + err.message, "error");
+<script>
+    const input = document.getElementById('main-input');
+    const logsContainer = document.getElementById('logs');
+    const frame = document.getElementById('target-frame');
+    const resultArea = document.getElementById('result-area');
+
+    // --- LOGIQUE DE LOGS ---
+    function addLog(msg, type = '') {
+        const line = document.createElement('div');
+        line.className = `log-line log-${type}`;
+        line.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        logsContainer.prepend(line);
     }
-}
-    </script>
+
+    // --- GESTION ENTRÉE ---
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const val = input.value.trim();
+            if (val.startsWith('http')) {
+                addLog("Lien détecté, chargement...", "info");
+                document.getElementById('placeholder').style.display = 'none';
+                frame.src = val;
+            } else if (val.length >= 3) {
+                showFinalBarcode(val);
+            }
+            input.value = '';
+        }
+    });
+
+    // --- AFFICHAGE BARCODE ---
+    function showFinalBarcode(code) {
+        resultArea.style.display = 'block';
+        const cleanCode = code.toUpperCase();
+        document.getElementById('code-val').innerText = cleanCode;
+        JsBarcode("#barcode", cleanCode, {
+            format: "CODE128",
+            width: 2,
+            height: 80,
+            displayValue: false
+        });
+        addLog("Barcode généré : " + cleanCode, "success");
+    }
+
+    // --- DÉCODAGE VISUEL (OCR/QR) ---
+    async function decodeDisplayedQR() {
+        addLog("Demande d'accès au flux vidéo...", "info");
+        
+        try {
+            // Capture de l'écran (choisir l'onglet actuel)
+            const stream = await navigator.mediaDevices.getDisplayMedia({ 
+                video: { displaySurface: "browser" },
+                audio: false 
+            });
+            
+            const track = stream.getVideoTracks()[0];
+            const imageCapture = new ImageCapture(track);
+            const bitmap = await imageCapture.grabFrame();
+            
+            // Analyse de l'image
+            const canvas = document.createElement('canvas');
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(bitmap, 0, 0);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            
+            if (code) {
+                addLog("QR détecté visuellement !", "success");
+                // On cherche un HCN dans l'URL extraite du QR
+                const hcnMatch = code.data.match(/HCN[a-zA-Z0-9]+/);
+                if (hcnMatch) {
+                    showFinalBarcode(hcnMatch[0]);
+                } else {
+                    addLog("Lien trouvé mais pas de code HCN. Lien : " + code.data.substring(0,30) + "...", "error");
+                    // On essaie d'utiliser l'URL directement au cas où
+                    if(code.data.startsWith('http')) frame.src = code.data;
+                }
+            } else {
+                addLog("Aucun QR Code trouvé sur l'image capturée.", "error");
+            }
+            
+            // Fermer le flux proprement
+            track.stop();
+            stream.getTracks().forEach(t => t.stop());
+
+        } catch (err) {
+            addLog("Erreur : " + err.message, "error");
+        }
+    }
+</script>
+
 </body>
 </html>
