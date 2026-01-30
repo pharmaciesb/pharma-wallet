@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner Remise Officine</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f0f2f5; padding: 10px; margin: 0; }
+        .card { max-width: 450px; margin: 10px auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        #reader { width: 100%; border-radius: 10px; margin-bottom: 15px; }
+        #loader { display: none; color: #007bff; font-weight: bold; padding: 20px; }
+        #result-area { display: none; }
+        .barcode-container { background: white; padding: 20px; border: 2px solid #28a745; border-radius: 10px; margin: 15px 0; }
+        svg #barcode { max-width: 100%; }
+        .btn { background: #007bff; color: white; border: none; padding: 12px 25px; border-radius: 8px; font-size: 1rem; cursor: pointer; }
+        .btn-secondary { background: #6c757d; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2 style="color: #2c3e50; margin-top: 0;">Promo Flash Officine</h2>
+    
+    <div id="reader"></div>
+
+    <div id="loader">Récupération du code...</div>
+
+    <div id="result-area">
+        <p>Code détecté : <strong id="text-code"></strong></p>
+        <div class="barcode-container">
+            <svg id="barcode"></svg>
+        </div>
+        <button class="btn" onclick="resetScanner()">Scanner un autre</button>
+    </div>
+</div>
+
+<script>
+    // Votre URL Cloudflare validée
+    const WORKER_URL = "https://solitary-river-bec4.pharmaciesaintbarthelemy.workers.dev/";
+    const html5QrCode = new Html5Qrcode("reader");
+
+    function startScanner() {
+        html5QrCode.start(
+            { facingMode: "environment" }, 
+            { fps: 10, qrbox: 250 },
+            onScanSuccess
+        ).catch(err => console.error("Erreur caméra", err));
+    }
+
+    async function onScanSuccess(decodedText) {
+        // Stopper caméra et montrer loader
+        await html5QrCode.stop();
+        document.getElementById('reader').style.display = 'none';
+        document.getElementById('loader').style.display = 'block';
+
+        try {
+            // Appel à votre Worker
+            const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(decodedText)}`);
+            const data = await response.json();
+
+            if (data.code && data.code !== "Non trouvé") {
+                showBarcode(data.code);
+            } else {
+                alert("Code introuvable sur cette affiche.");
+                resetScanner();
+            }
+        } catch (err) {
+            alert("Erreur de connexion au Worker.");
+            resetScanner();
+        }
+    }
+
+    function showBarcode(code) {
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('result-area').style.display = 'block';
+        document.getElementById('text-code').innerText = code;
+
+        // Génère le code-barres exploitable par votre douchette
+        JsBarcode("#barcode", code, {
+            format: "CODE128",
+            lineColor: "#000",
+            width: 2,
+            height: 80,
+            displayValue: false
+        });
+    }
+
+    function resetScanner() {
+        document.getElementById('result-area').style.display = 'none';
+        document.getElementById('reader').style.display = 'block';
+        startScanner();
+    }
+
+    // Lancement automatique au chargement
+    startScanner();
+</script>
+
+</body>
+</html>
