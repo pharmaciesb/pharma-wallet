@@ -31,6 +31,7 @@
 <div class="panel-left">
     <h3>🔍 Scan & Debug</h3>
     <input type="text" id="url-input" placeholder="Scannez ici..." autofocus>
+    <button onclick="decodeDisplayedQR()" class="btn">📷 Décoder l'écran</button>
     
     <div id="status" style="margin-top: 15px;"></div>
 
@@ -52,93 +53,53 @@
     <iframe id="highco-view"></iframe>
 </div>
 
-<script>
-    const input = document.getElementById('url-input');
-    const logs = document.getElementById('logs');
-    const iframe = document.getElementById('highco-view');
-    const resultArea = document.getElementById('result-area');
+// On ajoute la bibliothèque de lecture de QR Code
+const script = document.createElement('script');
+script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
+document.head.appendChild(script);
 
-    input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            const val = input.value.trim();
-            if (val.startsWith('http')) {
-                startAnalysis(val);
-            } else {
-                showBarcode(val);
-            }
-            input.value = '';
-        }
-    });
-
-    function addLog(msg, type = '') {
-        const line = document.createElement('div');
-        line.className = 'log-line ' + (type ? 'log-' + type : '');
-        line.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        logs.prepend(line);
-        console.log(msg);
-    }
-
-    async function startAnalysis(url) {
-        addLog("Début de l'analyse : " + url);
-        resultArea.style.display = 'none';
-        document.getElementById('iframe-placeholder').style.display = 'none';
+async function decodeDisplayedQR() {
+    addLog("Tentative de lecture visuelle du QR Code...");
+    
+    try {
+        // 1. On demande l'autorisation de capturer l'onglet
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" } });
+        const track = stream.getVideoTracks()[0];
+        const imageCapture = new ImageCapture(track);
+        const bitmap = await imageCapture.grabFrame();
         
-        // 1. On charge la vue réelle à droite pour que l'humain voit le code
-        iframe.src = url;
-
-        // 2. Tentative d'extraction via Proxy
-        const proxy = "https://api.allorigins.win/get?url=";
+        // 2. On dessine l'image sur un canvas invisible pour l'analyser
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0);
         
-        try {
-            addLog("Appel opn.to via Proxy...");
-            const res1 = await fetch(proxy + encodeURIComponent(url));
-            const data1 = await res1.json();
-            const html1 = data1.contents;
-
-            // Recherche du lien HighCo
-            const highCoMatch = html1.match(/https:\/\/highcodata\.walletpass\.fr\/download\/[a-zA-Z0-9?=%&-_.]+/);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        
+        // 3. Utilisation de jsQR pour trouver le code dans l'image
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        
+        if (code) {
+            addLog("QR Code décodé visuellement !", "success");
+            const urlFinal = code.data;
+            addLog("URL extraite : " + urlFinal);
             
-            if (highCoMatch) {
-                const cleanUrl = highCoMatch[0].replace(/&amp;/g, '&');
-                addLog("Lien HighCo détecté avec token", "success");
-
-                // Tentative sur la page HighCo
-                addLog("Sniffing de la page HighCo...");
-                const res2 = await fetch(proxy + encodeURIComponent(cleanUrl));
-                const data2 = await res2.json();
-                const html2 = data2.contents;
-
-                addLog("HTML HighCo reçu (" + html2.length + " octets)");
-
-                // On cherche le code HCN ou 13 chiffres
-                const codeMatch = html2.match(/HCN[a-zA-Z0-9]+/) || html2.match(/[0-9]{13}/);
-
-                if (codeMatch) {
-                    addLog("CODE TROUVÉ : " + codeMatch[0], "success");
-                    showBarcode(codeMatch[0]);
-                } else {
-                    addLog("Code absent du HTML (Bloqué par campagne)", "error");
-                    if (html2.includes("Activez la campagne")) {
-                        addLog("Détail : Serveur HighCo a rejeté le proxy (token expiré).", "error");
-                    }
-                }
+            // Souvent le HCN est à la fin de cette URL
+            const hcnMatch = urlFinal.match(/HCN[a-zA-Z0-9]+/);
+            if (hcnMatch) {
+                showBarcode(hcnMatch[0]);
             } else {
-                addLog("Impossible d'extraire le lien HighCo de opn.to", "error");
+                addLog("URL trouvée mais pas de HCN dedans. Analyse manuelle requise.", "error");
             }
-        } catch (err) {
-            addLog("Erreur réseau : " + err.message, "error");
+        } else {
+            addLog("Aucun QR Code détecté sur l'écran.", "error");
         }
+        
+        track.stop(); // On arrête la capture
+    } catch (err) {
+        addLog("Erreur de capture : " + err.message, "error");
     }
-
-    function showBarcode(code) {
-        resultArea.style.display = 'block';
-        document.getElementById('final-code-text').innerText = code.toUpperCase();
-        JsBarcode("#barcode", code.toUpperCase(), {
-            format: "CODE128",
-            displayValue: false
-        });
-        addLog("Génération Code-barres pour : " + code, "success");
-    }
-</script>
+}
 </body>
 </html>
