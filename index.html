@@ -2,105 +2,103 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Scanner Promo - Officine</title>
+    <title>Extracteur de Remise</title>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <style>
         body { font-family: sans-serif; background: #f4f7f9; text-align: center; padding: 20px; }
-        .card { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .input-area { margin: 20px 0; }
-        input { width: 80%; padding: 12px; font-size: 1.2rem; border: 2px solid #007bff; border-radius: 8px; text-align: center; }
-        #barcode-result { display: none; margin-top: 20px; padding: 20px; border: 2px dashed #28a745; background: #fafffa; }
-        .debug-panel { margin-top: 30px; font-size: 0.7rem; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
-        .btn-debug { background: none; border: 1px solid #ccc; color: #999; cursor: pointer; padding: 5px; border-radius: 4px; }
+        .card { max-width: 500px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        input { width: 90%; padding: 12px; font-size: 1.1rem; border: 2px solid #007bff; border-radius: 8px; margin: 15px 0; }
+        #status { font-size: 0.8rem; color: #666; margin-bottom: 10px; }
+        #result { display: none; margin-top: 20px; border: 2px solid #28a745; padding: 15px; border-radius: 10px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>Remise Flash V1</h2>
-    <p>Scannez l'affiche ou tapez le code HCN</p>
-    
-    <div class="input-area">
-        <input type="text" id="main-input" placeholder="HCN..." autofocus>
-    </div>
+    <h2>Scanner Promo v2</h2>
+    <input type="text" id="scan-input" placeholder="Scannez ou tapez le code..." autofocus>
+    <div id="status">En attente de scan...</div>
 
-    <div id="barcode-result">
-        <strong id="code-display" style="font-size: 1.5rem; color: #28a745;"></strong><br>
+    <div id="result">
+        <h3 id="code-val" style="color:#28a745; margin:0;"></h3>
         <svg id="barcode"></svg>
-    </div>
-
-    <div class="debug-panel">
-        <button class="btn-debug" onclick="toggleDebug()">⚙️ Mode Diagnostic (Logs)</button>
-        <div id="debug-status" style="margin-top:5px;"></div>
     </div>
 </div>
 
 <script>
-    const input = document.getElementById('main-input');
-    const PROXY = "https://corsproxy.io/?"; 
-    const WORKER_URL = "https://solitary-river-bec4.pharmaciesaintbarthelemy.workers.dev/";
+    const input = document.getElementById('scan-input');
+    const status = document.getElementById('status');
 
-    input.addEventListener('keypress', (e) => {
+    input.addEventListener('keypress', async (e) => {
         if (e.key === 'Enter') {
             const val = input.value.trim();
             if (val.startsWith('http')) {
-                runDiagnostic(val);
-                // On informe l'utilisateur mais on lance les logs en arrière-plan
-                alert("Lien détecté. Tentative d'extraction en cours dans la console (F12). Si rien ne s'affiche, tapez le code manuellement.");
-                input.value = '';
+                analyzeUrl(val);
             } else if (val.length > 2) {
                 showBarcode(val);
-                input.value = '';
             }
+            input.value = '';
         }
     });
 
-    // Affiche le code-barres immédiatement
+    async function analyzeUrl(url) {
+        status.innerText = "⏳ Analyse du lien...";
+        console.log("--- TENTATIVE D'EXTRACTION ---");
+        
+        // On utilise AllOrigins (plus puissant pour le contenu dynamique)
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+
+        try {
+            const response = await fetch(proxyUrl);
+            const data = await response.json();
+            const html = data.contents; // AllOrigins met le HTML dans 'contents'
+
+            console.log("HTML de opn.to reçu (" + html.length + " caractères)");
+
+            // Recherche de l'URL HighCo
+            const highCoMatch = html.match(/https:\/\/highcodata\.walletpass\.fr\/download\/[a-zA-Z0-9?=%&-_.]+/);
+
+            if (highCoMatch) {
+                const cleanUrl = highCoMatch[0].replace(/&amp;/g, '&');
+                status.innerText = "⏳ Lien HighCo trouvé, lecture du code...";
+                console.log("URL HighCo détectée :", cleanUrl);
+
+                // Deuxième saut vers HighCo
+                const res2 = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(cleanUrl)}`);
+                const data2 = await res2.json();
+                const html2 = data2.contents;
+
+                console.log("HTML de HighCo reçu (" + html2.length + " caractères)");
+
+                // Recherche du code HCN ou 13 chiffres
+                const codeMatch = html2.match(/HCN[a-zA-Z0-9]+/) || html2.match(/[0-9]{13}/);
+
+                if (codeMatch) {
+                    showBarcode(codeMatch[0]);
+                    status.innerText = "✅ Succès !";
+                } else {
+                    console.log("Début du HTML HighCo pour debug :", html2.substring(0, 500));
+                    throw new Error("Code non trouvé dans la page finale.");
+                }
+            } else {
+                console.log("Début du HTML opn.to pour debug :", html.substring(0, 500));
+                throw new Error("Lien HighCo introuvable dans l'affiche.");
+            }
+        } catch (err) {
+            status.innerText = "❌ " + err.message;
+            console.error(err);
+        }
+    }
+
     function showBarcode(code) {
-        document.getElementById('barcode-result').style.display = 'block';
-        document.getElementById('code-display').innerText = code.toUpperCase();
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('code-val').innerText = code.toUpperCase();
         JsBarcode("#barcode", code.toUpperCase(), {
             format: "CODE128",
             width: 2,
             height: 80,
             displayValue: false
         });
-    }
-
-    // Fonction de log pour nous deux
-    async function runDiagnostic(url) {
-        const status = document.getElementById('debug-status');
-        status.innerText = "⏳ Diagnostic en cours...";
-        console.log("%c--- DEBUT DIAGNOSTIC ---", "color: blue; font-weight: bold;");
-        console.log("URL scannée :", url);
-
-        try {
-            // Test via le Worker avec logs activés
-            const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`);
-            const data = await response.json();
-            
-            console.log("Retour Worker :", data);
-            
-            if (data.html_debug) {
-                console.log("Contenu HTML intercepté (Extraits) :", data.html_debug);
-            }
-
-            if (data.code) {
-                console.log("%cSUCCÈS : Code trouvé -> " + data.code, "color: green; font-weight: bold;");
-                showBarcode(data.code);
-                status.innerText = "✅ Succès !";
-            } else {
-                console.warn("ÉCHEC : Le code n'a pas été trouvé dans le flux.");
-                status.innerText = "❌ Échec (voir F12)";
-            }
-        } catch (err) {
-            console.error("ERREUR RÉSEAU :", err);
-            status.innerText = "❌ Erreur de connexion au Worker";
-        }
-    }
-
-    function toggleDebug() {
-        alert("Les logs détaillés sont envoyés dans la console du navigateur. Appuyez sur F12 pour les consulter.");
     }
 </script>
 </body>
