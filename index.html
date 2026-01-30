@@ -2,105 +2,96 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Extracteur de Remise Officine</title>
+    <title>Extracteur HighCo Officine</title>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f9; padding: 20px; }
-        .container { max-width: 700px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
-        .input-group { margin-bottom: 20px; text-align: left; }
-        input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 1rem; box-sizing: border-box; }
-        input:focus { border-color: #007bff; outline: none; }
-        .log-area { background: #f8f9fa; padding: 15px; border-radius: 6px; font-size: 0.85rem; color: #555; margin-bottom: 20px; border-left: 4px solid #007bff; text-align: left; }
-        .result-card { display: none; border: 3px solid #28a745; padding: 20px; border-radius: 10px; background: #f0fff4; }
-        #barcode { max-width: 100%; margin-top: 10px; }
-        .loading { display: none; color: #007bff; font-weight: bold; margin: 10px; }
+        body { font-family: sans-serif; text-align: center; background: #f4f7f9; padding: 20px; }
+        .card { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        input { width: 90%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 6px; }
+        #loader { display: none; color: #007bff; font-weight: bold; margin: 20px; }
+        .result { display: none; margin-top: 20px; padding: 20px; border: 3px solid #28a745; border-radius: 10px; }
+        #barcode { max-width: 100%; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Promo Flash Officine V0.1</h2>
+<div class="card">
+    <h2>Scanner Promo HighCo</h2>
+    <input type="text" id="scan-input" placeholder="Scannez le QR Code ici..." autofocus>
     
-    <div class="input-group">
-        <label>Scannez ici (ou collez l'URL opn.to) :</label>
-        <input type="text" id="main-input" placeholder="Attente du scan..." autofocus>
-    </div>
+    <div id="loader">⏳ Extraction du code en cours...</div>
 
-    <div id="loader" class="loading">⏳ Analyse de la page HighCo...</div>
-
-    <div id="logs" class="log-area" style="display:none">
-        <strong>Dernières étapes :</strong><br>
-        <span id="log-step"></span>
-    </div>
-
-    <div id="result" class="result-card">
-        <h3 style="margin:0; color:#1e7e34;">Code : <span id="final-code"></span></h3>
+    <div id="result" class="result">
+        <h3 id="code-text" style="color:#28a745; font-size: 1.5rem;"></h3>
         <svg id="barcode"></svg>
         <br>
-        <button onclick="location.reload()" style="margin-top:15px; padding:8px 15px;">Nouveau scan</button>
+        <button onclick="location.reload()" style="margin-top:15px;">Nouveau scan</button>
     </div>
 </div>
 
 <script>
-    const WORKER_URL = "https://solitary-river-bec4.pharmaciesaintbarthelemy.workers.dev/";
-    const mainInput = document.getElementById('main-input');
+    const input = document.getElementById('scan-input');
+    // On utilise un proxy CORS pour contourner les protections navigateur
+    const PROXY = "https://corsproxy.io/?"; 
 
-    mainInput.addEventListener('keypress', function(e) {
+    input.addEventListener('keypress', async (e) => {
         if (e.key === 'Enter') {
-            const val = mainInput.value.trim();
-            if (val.startsWith('http')) {
-                process(val);
-            } else {
-                alert("Veuillez scanner une URL valide.");
-                mainInput.value = '';
+            const url = input.value.trim();
+            if (url.includes('http')) {
+                process(url);
             }
+            input.value = '';
         }
     });
 
-    async function process(url) {
-    const logStep = document.getElementById('log-step');
-    document.getElementById('loader').style.display = 'block';
+    async function process(targetUrl) {
+        document.getElementById('loader').style.display = 'block';
+        document.getElementById('result').style.display = 'none';
 
-    try {
-        const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`);
-        const data = await response.json();
+        try {
+            // 1. On récupère la page opn.to via le proxy
+            const res1 = await fetch(PROXY + encodeURIComponent(targetUrl));
+            const html1 = await res1.text();
 
-        if (data.trace) {
-            console.log("--- TRACE DU WORKER ---");
-            data.trace.forEach(t => console.log(t));
-        }
+            // 2. On cherche le lien walletpass
+            const regexUrl = /https:\/\/highcodata\.walletpass\.fr\/download\/[^"'\s>]+/g;
+            const match = html1.match(regexUrl);
 
-        if (data.code) {
-            showFinal(data.code);
-        } else {
-            console.error("ÉCHEC DE L'EXTRACTION");
-            if (data.html_debug) {
-                console.log("CONTENU HTML REÇU (OPN.TO) :", data.html_debug);
+            if (!match) throw new Error("Lien HighCo non trouvé dans l'affiche.");
+
+            const highCoUrl = match[0].replace(/&amp;/g, '&');
+            console.log("Lien détecté :", highCoUrl);
+
+            // 3. On récupère la page HighCo via le proxy
+            const res2 = await fetch(PROXY + encodeURIComponent(highCoUrl));
+            const html2 = await res2.text();
+
+            // 4. On cherche le code HCN
+            const matchHCN = html2.match(/HCN[a-zA-Z0-9]+/);
+            
+            if (matchHCN) {
+                showResult(matchHCN[0]);
+            } else {
+                // Si pas de HCN, on cherche un nombre de 13 chiffres
+                const matchAlt = html2.match(/[0-9]{13}/);
+                if (matchAlt) showResult(matchAlt[0]);
+                else throw new Error("Code promo non trouvé dans la page.");
             }
-            if (data.html_final_debug) {
-                console.log("CONTENU HTML REÇU (HIGHCO) :", data.html_final_debug);
-            }
-            logStep.innerText = data.error || "Code non trouvé (voir console F12)";
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            document.getElementById('loader').style.display = 'none';
         }
-    } catch (err) {
-        console.error("Erreur :", err);
-        logStep.innerText = "Erreur de connexion.";
-    } finally {
-        document.getElementById('loader').style.display = 'none';
     }
-}
 
-    function showFinal(code) {
+    function showResult(code) {
         document.getElementById('result').style.display = 'block';
-        document.getElementById('final-code').innerText = code;
+        document.getElementById('code-text').innerText = code;
         JsBarcode("#barcode", code, {
             format: "CODE128",
-            width: 2.5,
-            height: 80,
             displayValue: false
         });
     }
 </script>
-
 </body>
 </html>
