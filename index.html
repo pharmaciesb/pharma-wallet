@@ -2,101 +2,106 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestionnaire Remises Officine</title>
+    <title>Scanner Promo - Officine</title>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .container { width: 100%; max-width: 500px; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; }
-        h1 { color: #1a73e8; margin-bottom: 20px; font-size: 1.5rem; }
-        
-        .section { background: #f8f9fa; border: 1px solid #e1e4e8; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
-        .section-title { font-weight: bold; color: #5f6368; margin-bottom: 10px; font-size: 0.9rem; text-transform: uppercase; }
-        
-        input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 1.1rem; box-sizing: border-box; text-align: center; }
-        input:focus { border-color: #1a73e8; outline: none; }
-        
-        .btn { background: #1a73e8; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
-        .btn:hover { background: #1557b0; }
-
-        #result-area { display: none; margin-top: 20px; border-top: 2px solid #eee; padding-top: 20px; }
-        .barcode-container { background: white; padding: 15px; border: 2px solid #34a853; border-radius: 10px; margin: 15px 0; }
-        
-        .history { text-align: left; margin-top: 20px; font-size: 0.8rem; color: #666; max-height: 100px; overflow-y: auto; }
-        .history-item { border-bottom: 1px solid #eee; padding: 5px 0; }
+        body { font-family: sans-serif; background: #f4f7f9; text-align: center; padding: 20px; }
+        .card { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .input-area { margin: 20px 0; }
+        input { width: 80%; padding: 12px; font-size: 1.2rem; border: 2px solid #007bff; border-radius: 8px; text-align: center; }
+        #barcode-result { display: none; margin-top: 20px; padding: 20px; border: 2px dashed #28a745; background: #fafffa; }
+        .debug-panel { margin-top: 30px; font-size: 0.7rem; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+        .btn-debug { background: none; border: 1px solid #ccc; color: #999; cursor: pointer; padding: 5px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>🏷️ Remise Flash</h1>
-
-    <div class="section">
-        <div class="section-title">Saisie ou Scan Douchette</div>
-        <input type="text" id="manual-code" placeholder="Entrez le code HCN..." autofocus>
-        <p style="font-size: 0.7rem; color: #888; margin-top: 8px;">Tapez le code écrit sous le QR de l'affiche ou scannez directement.</p>
+<div class="card">
+    <h2>Remise Flash V1</h2>
+    <p>Scannez l'affiche ou tapez le code HCN</p>
+    
+    <div class="input-area">
+        <input type="text" id="main-input" placeholder="HCN..." autofocus>
     </div>
 
-    <div id="result-area">
-        <div class="barcode-container">
-            <svg id="barcode"></svg>
-        </div>
-        <div style="font-weight: bold; font-size: 1.2rem; color: #34a853;" id="display-code"></div>
-        <button class="btn" style="background:#6c757d" onclick="resetForm()">Nouveau code</button>
+    <div id="barcode-result">
+        <strong id="code-display" style="font-size: 1.5rem; color: #28a745;"></strong><br>
+        <svg id="barcode"></svg>
     </div>
 
-    <div class="history" id="history">
-        <div class="section-title">Historique récent</div>
+    <div class="debug-panel">
+        <button class="btn-debug" onclick="toggleDebug()">⚙️ Mode Diagnostic (Logs)</button>
+        <div id="debug-status" style="margin-top:5px;"></div>
     </div>
 </div>
 
 <script>
-    const input = document.getElementById('manual-code');
-    const historyBox = document.getElementById('history');
+    const input = document.getElementById('main-input');
+    const PROXY = "https://corsproxy.io/?"; 
+    const WORKER_URL = "https://solitary-river-bec4.pharmaciesaintbarthelemy.workers.dev/";
 
-    // Détection de la saisie (douchette ou clavier)
-    input.addEventListener('keypress', function(e) {
+    input.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            let val = input.value.trim();
-            
-            // Si c'est une URL, on essaie d'extraire le code (basique)
-            if (val.includes('http')) {
-                alert("L'extraction automatique est bloquée par l'affiche. Merci de saisir manuellement le code écrit en bas du QR Code.");
+            const val = input.value.trim();
+            if (val.startsWith('http')) {
+                runDiagnostic(val);
+                // On informe l'utilisateur mais on lance les logs en arrière-plan
+                alert("Lien détecté. Tentative d'extraction en cours dans la console (F12). Si rien ne s'affiche, tapez le code manuellement.");
                 input.value = '';
-                return;
-            }
-
-            if (val.length > 3) {
-                generateBarcode(val);
+            } else if (val.length > 2) {
+                showBarcode(val);
+                input.value = '';
             }
         }
     });
 
-    function generateBarcode(code) {
-        document.getElementById('result-area').style.display = 'block';
-        document.getElementById('display-code').innerText = code;
-        
-        JsBarcode("#barcode", code, {
+    // Affiche le code-barres immédiatement
+    function showBarcode(code) {
+        document.getElementById('barcode-result').style.display = 'block';
+        document.getElementById('code-display').innerText = code.toUpperCase();
+        JsBarcode("#barcode", code.toUpperCase(), {
             format: "CODE128",
-            width: 2.5,
+            width: 2,
             height: 80,
             displayValue: false
         });
-
-        // Ajout à l'historique
-        const item = document.createElement('div');
-        item.className = 'history-item';
-        item.innerText = `${new Date().toLocaleTimeString()} - ${code}`;
-        historyBox.prepend(item);
-        
-        input.value = '';
     }
 
-    function resetForm() {
-        document.getElementById('result-area').style.display = 'none';
-        input.focus();
+    // Fonction de log pour nous deux
+    async function runDiagnostic(url) {
+        const status = document.getElementById('debug-status');
+        status.innerText = "⏳ Diagnostic en cours...";
+        console.log("%c--- DEBUT DIAGNOSTIC ---", "color: blue; font-weight: bold;");
+        console.log("URL scannée :", url);
+
+        try {
+            // Test via le Worker avec logs activés
+            const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`);
+            const data = await response.json();
+            
+            console.log("Retour Worker :", data);
+            
+            if (data.html_debug) {
+                console.log("Contenu HTML intercepté (Extraits) :", data.html_debug);
+            }
+
+            if (data.code) {
+                console.log("%cSUCCÈS : Code trouvé -> " + data.code, "color: green; font-weight: bold;");
+                showBarcode(data.code);
+                status.innerText = "✅ Succès !";
+            } else {
+                console.warn("ÉCHEC : Le code n'a pas été trouvé dans le flux.");
+                status.innerText = "❌ Échec (voir F12)";
+            }
+        } catch (err) {
+            console.error("ERREUR RÉSEAU :", err);
+            status.innerText = "❌ Erreur de connexion au Worker";
+        }
+    }
+
+    function toggleDebug() {
+        alert("Les logs détaillés sont envoyés dans la console du navigateur. Appuyez sur F12 pour les consulter.");
     }
 </script>
-
 </body>
 </html>
