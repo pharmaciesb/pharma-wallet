@@ -2,82 +2,77 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner Pharma - Mode Expert</title>
+    <title>Pharma Wallet Pro - Officine</title>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; background: #121212; color: white; overflow: hidden; }
-        .panel-left { width: 420px; padding: 20px; border-right: 1px solid #333; display: flex; flex-direction: column; box-sizing: border-box; background: #1e1e1e; }
-        .panel-right { flex-grow: 1; background: #fff; position: relative; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; background: #0f172a; color: #f8fafc; overflow: hidden; }
+        .panel-left { width: 400px; padding: 20px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; }
+        .panel-right { flex-grow: 1; background: #f1f5f9; }
         iframe { width: 100%; height: 100%; border: none; }
-        .input-group { margin-bottom: 20px; }
-        input { width: 100%; padding: 15px; background: #2d2d2d; border: 2px solid #3d3d3d; color: #00ff00; border-radius: 8px; font-size: 1.1rem; font-family: monospace; box-sizing: border-box; }
-        input:focus { border-color: #007bff; outline: none; }
-        .btn-scan { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 15px; font-size: 1rem; }
-        .btn-scan:hover { background: #0056b3; }
-        #result-area { margin-top: 10px; padding: 15px; background: white; color: black; border-radius: 12px; text-align: center; display: none; border: 4px solid #28a745; }
-        #barcode { width: 100%; max-height: 120px; }
-        #logs { flex-grow: 1; margin-top: 20px; background: #000; padding: 10px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.75rem; overflow-y: auto; border: 1px solid #333; }
-        .log-line { margin-bottom: 4px; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; }
-        .log-success { color: #28a745; }
-        .log-error { color: #ff4d4d; }
-        .log-info { color: #00d4ff; }
-        video { display: none; } /* On cache la vidéo de capture */
+        
+        .card { background: #334155; padding: 15px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        input { width: 100%; padding: 12px; background: #0f172a; border: 2px solid #475569; color: #22c55e; border-radius: 8px; font-size: 1rem; font-family: monospace; box-sizing: border-box; }
+        .btn-scan { width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 10px; font-size: 1rem; transition: 0.2s; }
+        .btn-scan:hover { background: #2563eb; }
+
+        #result-area { background: white; color: #1e293b; padding: 15px; border-radius: 12px; text-align: center; display: none; margin-top: 15px; }
+        #barcode { width: 100%; height: auto; }
+        
+        #history { flex-grow: 1; margin-top: 20px; overflow-y: auto; font-size: 0.8rem; border-top: 1px solid #334155; padding-top: 10px; }
+        .hist-item { padding: 8px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; cursor: pointer; }
+        .hist-item:hover { background: #334155; }
+        
+        #logs { font-size: 0.7rem; color: #94a3b8; font-family: monospace; max-height: 80px; overflow-y: auto; margin-top: 10px; }
+        video { display: none; }
     </style>
 </head>
 <body>
 
 <div class="panel-left">
-    <h2>🚀 Pharma Scan V2</h2>
-    
-    <div class="input-group">
-        <label style="font-size: 0.8rem; color: #888;">SCANNER OU TAPER CODE :</label>
-        <input type="text" id="main-input" placeholder="Lien ou code HCN..." autofocus>
+    <div class="card">
+        <label style="font-size: 0.75rem; font-weight: bold;">SAISIE DOUCHETTE OU CLAVIER</label>
+        <input type="text" id="main-input" placeholder="Lien ou code..." autofocus>
+        <button class="btn-scan" onclick="decodeDisplayedQR()">📷 ANALYSER L'ÉCRAN (QR)</button>
     </div>
 
-    <button class="btn-scan" onclick="decodeDisplayedQR()">📷 DÉCODER LE QR À L'ÉCRAN</button>
-
     <div id="result-area">
-        <div id="code-val" style="font-weight: 900; font-size: 1.4rem; margin-bottom: 5px;"></div>
+        <div id="code-val" style="font-weight: 900; font-size: 1.5rem;"></div>
         <svg id="barcode"></svg>
     </div>
 
-    <div id="logs">
-        <div class="log-info">[Système] Prêt pour le scan.</div>
+    <div id="history">
+        <div style="font-weight: bold; color: #64748b; margin-bottom: 8px;">Derniers codes :</div>
+        <div id="hist-list"></div>
     </div>
+
+    <div id="logs"></div>
 </div>
 
 <div class="panel-right">
-    <iframe id="target-frame" name="target-frame"></iframe>
-    <div id="placeholder" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ccc; text-align: center;">
-        L'affiche HighCo apparaîtra ici
-    </div>
+    <iframe id="target-frame"></iframe>
 </div>
 
 <video id="capture-video" autoplay></video>
 
 <script>
     const input = document.getElementById('main-input');
-    const logsContainer = document.getElementById('logs');
     const frame = document.getElementById('target-frame');
     const resultArea = document.getElementById('result-area');
     const video = document.getElementById('capture-video');
+    const histList = document.getElementById('hist-list');
 
-    function addLog(msg, type = '') {
-        const line = document.createElement('div');
-        line.className = `log-line log-${type}`;
-        line.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        logsContainer.prepend(line);
+    function addLog(msg, color = "") {
+        const log = document.getElementById('logs');
+        log.innerHTML = `<div style="color:${color}">[${new Date().toLocaleTimeString()}] ${msg}</div>` + log.innerHTML;
     }
 
     input.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             const val = input.value.trim();
             if (val.startsWith('http')) {
-                addLog("Lien détecté, chargement...", "info");
-                document.getElementById('placeholder').style.display = 'none';
                 frame.src = val;
+                addLog("Chargement de la page...", "#3b82f6");
             } else if (val.length >= 3) {
                 showFinalBarcode(val);
             }
@@ -87,87 +82,56 @@
 
     function showFinalBarcode(code) {
         resultArea.style.display = 'block';
-        const cleanCode = code.toUpperCase();
-        document.getElementById('code-val').innerText = cleanCode;
-        JsBarcode("#barcode", cleanCode, {
-            format: "CODE128",
+        document.getElementById('code-val').innerText = code;
+        
+        // On détecte le format (EAN13 si 13 chiffres, sinon CODE128)
+        const isEAN = /^[0-9]{13}$/.test(code);
+        JsBarcode("#barcode", code, {
+            format: isEAN ? "EAN13" : "CODE128",
             width: 2,
-            height: 80,
-            displayValue: false
+            height: 100,
+            displayValue: isEAN // Affiche les chiffres si EAN
         });
-        addLog("Barcode généré : " + cleanCode, "success");
+
+        // Ajout historique
+        const item = document.createElement('div');
+        item.className = 'hist-item';
+        item.innerHTML = `<span>${code}</span> <span>${new Date().toLocaleTimeString()}</span>`;
+        item.onclick = () => showFinalBarcode(code);
+        histList.prepend(item);
     }
 
     async function decodeDisplayedQR() {
-    addLog("Demande d'accès au flux vidéo...", "info");
-    
-    try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ 
-            video: { displaySurface: "browser" } 
-        });
-        
-        video.srcObject = stream;
-
-        video.onloadedmetadata = () => {
-            addLog("Analyse visuelle du QR Code...", "info");
-            
-            setTimeout(async () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-                
-                if (code) {
-                    addLog("Lien extrait du QR Code !", "success");
-                    const decodedUrl = code.data;
-
-                    // TENTATIVE D'EXTRACTION DU CODE HCN
-                    addLog("Recherche du code promo dans le lien...");
+        try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "browser" } });
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                setTimeout(async () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const code = jsQR(ctx.getImageData(0,0,canvas.width,canvas.height).data, canvas.width, canvas.height);
                     
-                    // On vérifie si le HCN est directement dans l'URL
-                    const hcnInUrl = decodedUrl.match(/HCN[a-zA-Z0-9]+/);
-                    if (hcnInUrl) {
-                        showFinalBarcode(hcnInUrl[0]);
-                    } else {
-                        // Sinon, on demande au Proxy de lire le contenu du lien de téléchargement
-                        addLog("Appel au serveur pour extraire le code final...");
-                        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(decodedUrl)}`;
-                        
-                        try {
-                            const res = await fetch(proxyUrl);
+                    if (code) {
+                        const decodedUrl = code.data;
+                        const hcnMatch = decodedUrl.match(/HCN[a-zA-Z0-9]+/);
+                        if (hcnMatch) {
+                            showFinalBarcode(hcnMatch[0]);
+                        } else {
+                            addLog("Lecture serveur...", "#eab308");
+                            const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(decodedUrl)}`);
                             const data = await res.json();
-                            const html = data.contents;
-
-                            const finalMatch = html.match(/HCN[a-zA-Z0-9]+/) || html.match(/[0-9]{13}/);
-                            if (finalMatch) {
-                                showFinalBarcode(finalMatch[0]);
-                            } else {
-                                addLog("Code introuvable. HighCo demande une validation manuelle.", "error");
-                                // On affiche l'URL pour debug au cas où
-                                console.log("Contenu reçu du QR :", html);
-                            }
-                        } catch (e) {
-                            addLog("Erreur de connexion au proxy.", "error");
+                            const finalMatch = data.contents.match(/HCN[a-zA-Z0-9]+/) || data.contents.match(/[0-9]{13}/);
+                            if (finalMatch) showFinalBarcode(finalMatch[0]);
+                            else addLog("Code introuvable dans le lien.", "#ef4444");
                         }
                     }
-                } else {
-                    addLog("Aucun QR Code visible. Zoomez sur l'iframe si besoin.", "error");
-                }
-
-                stream.getTracks().forEach(t => t.stop());
-                video.srcObject = null;
-            }, 500);
-        };
-
-    } catch (err) {
-        addLog("Erreur : " + err.message, "error");
+                    stream.getTracks().forEach(t => t.stop());
+                }, 500);
+            };
+        } catch (e) { addLog("Erreur : " + e.message, "#ef4444"); }
     }
-}
 </script>
-
 </body>
 </html>
