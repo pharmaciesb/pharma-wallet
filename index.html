@@ -29,7 +29,7 @@
 <body>
 
 <div class="panel-left">
-    <h2>🚀 Pharma Scan</h2>
+    <h2>🚀 Pharma Scan V2</h2>
     
     <div class="input-group">
         <label style="font-size: 0.8rem; color: #888;">SCANNER OU TAPER CODE :</label>
@@ -99,53 +99,74 @@
     }
 
     async function decodeDisplayedQR() {
-        addLog("Demande d'accès au flux vidéo...", "info");
+    addLog("Demande d'accès au flux vidéo...", "info");
+    
+    try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ 
+            video: { displaySurface: "browser" } 
+        });
         
-        try {
-            // Capture d'écran universelle
-            const stream = await navigator.mediaDevices.getDisplayMedia({ 
-                video: { displaySurface: "browser" } 
-            });
+        video.srcObject = stream;
+
+        video.onloadedmetadata = () => {
+            addLog("Analyse visuelle du QR Code...", "info");
             
-            video.srcObject = stream;
-
-            // On attend que la vidéo soit prête
-            video.onloadedmetadata = () => {
-                addLog("Analyse de l'image en cours...", "info");
+            setTimeout(async () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
-                // On attend un court instant que le flux soit stable
-                setTimeout(() => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                
+                if (code) {
+                    addLog("Lien extrait du QR Code !", "success");
+                    const decodedUrl = code.data;
+
+                    // TENTATIVE D'EXTRACTION DU CODE HCN
+                    addLog("Recherche du code promo dans le lien...");
                     
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const code = jsQR(imageData.data, imageData.width, imageData.height);
-                    
-                    if (code) {
-                        addLog("QR détecté visuellement !", "success");
-                        const hcnMatch = code.data.match(/HCN[a-zA-Z0-9]+/);
-                        if (hcnMatch) {
-                            showFinalBarcode(hcnMatch[0]);
-                        } else {
-                            addLog("Lien trouvé mais pas de HCN. Lien : " + code.data.substring(0, 30), "error");
-                        }
+                    // On vérifie si le HCN est directement dans l'URL
+                    const hcnInUrl = decodedUrl.match(/HCN[a-zA-Z0-9]+/);
+                    if (hcnInUrl) {
+                        showFinalBarcode(hcnInUrl[0]);
                     } else {
-                        addLog("Aucun QR Code trouvé. Vérifiez que le QR est bien visible à l'écran.", "error");
+                        // Sinon, on demande au Proxy de lire le contenu du lien de téléchargement
+                        addLog("Appel au serveur pour extraire le code final...");
+                        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(decodedUrl)}`;
+                        
+                        try {
+                            const res = await fetch(proxyUrl);
+                            const data = await res.json();
+                            const html = data.contents;
+
+                            const finalMatch = html.match(/HCN[a-zA-Z0-9]+/) || html.match(/[0-9]{13}/);
+                            if (finalMatch) {
+                                showFinalBarcode(finalMatch[0]);
+                            } else {
+                                addLog("Code introuvable. HighCo demande une validation manuelle.", "error");
+                                // On affiche l'URL pour debug au cas où
+                                console.log("Contenu reçu du QR :", html);
+                            }
+                        } catch (e) {
+                            addLog("Erreur de connexion au proxy.", "error");
+                        }
                     }
+                } else {
+                    addLog("Aucun QR Code visible. Zoomez sur l'iframe si besoin.", "error");
+                }
 
-                    // Nettoyage du flux
-                    stream.getTracks().forEach(t => t.stop());
-                    video.srcObject = null;
-                }, 500);
-            };
+                stream.getTracks().forEach(t => t.stop());
+                video.srcObject = null;
+            }, 500);
+        };
 
-        } catch (err) {
-            addLog("Erreur : " + err.message, "error");
-        }
+    } catch (err) {
+        addLog("Erreur : " + err.message, "error");
     }
+}
 </script>
 
 </body>
