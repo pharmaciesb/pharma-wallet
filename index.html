@@ -2,96 +2,94 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Scanner Promo Officine - Mode Douchette</title>
+    <title>Extracteur de Remise Officine</title>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #eceff1; padding: 40px; }
-        .card { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-        .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; background: #e8f5e9; color: #2e7d32; font-size: 0.8rem; margin-bottom: 20px; }
-        #scan-input { position: absolute; left: -9999px; } /* Champ caché pour capturer la douchette */
-        #loader { display: none; margin: 20px; font-weight: bold; color: #007bff; }
-        #result-area { display: none; }
-        .barcode-box { background: #f8f9fa; border: 3px solid #28a745; padding: 30px; border-radius: 15px; margin: 20px 0; }
-        .instruction { color: #546e7a; font-size: 1.1rem; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f9; padding: 20px; }
+        .container { max-width: 700px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
+        .input-group { margin-bottom: 20px; text-align: left; }
+        input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 1rem; box-sizing: border-box; }
+        input:focus { border-color: #007bff; outline: none; }
+        .log-area { background: #f8f9fa; padding: 15px; border-radius: 6px; font-size: 0.85rem; color: #555; margin-bottom: 20px; border-left: 4px solid #007bff; text-align: left; }
+        .result-card { display: none; border: 3px solid #28a745; padding: 20px; border-radius: 10px; background: #f0fff4; }
+        #barcode { max-width: 100%; margin-top: 10px; }
+        .loading { display: none; color: #007bff; font-weight: bold; margin: 10px; }
     </style>
 </head>
-<body onclick="focusInput()">
+<body>
 
-<div class="card">
-    <div class="status-badge">● Prêt à scanner</div>
-    <h1>Système Remise Flash</h1>
-    <p class="instruction">Flashez le QR code de l'affiche avec votre douchette</p>
+<div class="container">
+    <h2>Promo Flash Officine</h2>
     
-    <input type="text" id="scan-input" autofocus autocomplete="off">
+    <div class="input-group">
+        <label>Scannez ici (ou collez l'URL opn.to) :</label>
+        <input type="text" id="main-input" placeholder="Attente du scan..." autofocus>
+    </div>
 
-    <div id="loader">🔄 Traitement HighCo en cours...</div>
+    <div id="loader" class="loading">⏳ Analyse de la page HighCo...</div>
 
-    <div id="result-area">
-        <h2 style="color: #2e7d32;">CODE GÉNÉRÉ : <span id="text-code"></span></h2>
-        <div class="barcode-box">
-            <svg id="barcode"></svg>
-        </div>
-        <p style="color: #666;">Scannez ce code avec votre douchette pour appliquer la remise</p>
-        <button onclick="resetApp()" style="margin-top:20px; padding:10px 20px; cursor:pointer;">Scanner un autre</button>
+    <div id="logs" class="log-area" style="display:none">
+        <strong>Dernières étapes :</strong><br>
+        <span id="log-step"></span>
+    </div>
+
+    <div id="result" class="result-card">
+        <h3 style="margin:0; color:#1e7e34;">Code : <span id="final-code"></span></h3>
+        <svg id="barcode"></svg>
+        <br>
+        <button onclick="location.reload()" style="margin-top:15px; padding:8px 15px;">Nouveau scan</button>
     </div>
 </div>
 
 <script>
     const WORKER_URL = "https://solitary-river-bec4.pharmaciesaintbarthelemy.workers.dev/";
-    const input = document.getElementById('scan-input');
+    const mainInput = document.getElementById('main-input');
 
-    // Garder le focus sur l'input en permanence pour la douchette
-    function focusInput() { input.focus(); }
-    document.addEventListener('click', focusInput);
-
-    input.addEventListener('keypress', function(e) {
+    mainInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
-            const scannnedUrl = input.value;
-            if (scannnedUrl.includes('http')) {
-                processUrl(scannnedUrl);
+            const val = mainInput.value.trim();
+            if (val.startsWith('http')) {
+                process(val);
+            } else {
+                alert("Veuillez scanner une URL valide.");
+                mainInput.value = '';
             }
-            input.value = ''; // On vide pour le suivant
         }
     });
 
-    async function processUrl(url) {
+    async function process(url) {
         document.getElementById('loader').style.display = 'block';
-        document.getElementById('result-area').style.display = 'none';
-
+        document.getElementById('logs').style.display = 'block';
+        document.getElementById('log-step').innerText = "Lecture du lien court...";
+        
         try {
             const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`);
             const data = await response.json();
 
-            if (data.code && data.code !== "Non trouvé") {
-                showResult(data.code);
+            if (data.code && data.code !== "Code non trouvé") {
+                document.getElementById('log-step').innerHTML = `Lien HighCo trouvé : <br><small>${data.intermediateUrl}</small>`;
+                showFinal(data.code);
             } else {
-                alert("Erreur : Impossible d'extraire le code.");
-                resetApp();
+                document.getElementById('log-step').innerText = "Erreur : " + (data.error || "Code non trouvé");
             }
         } catch (err) {
-            alert("Erreur de connexion au Worker.");
-            resetApp();
+            document.getElementById('log-step').innerText = "Erreur de connexion réseau.";
+        } finally {
+            document.getElementById('loader').style.display = 'none';
         }
     }
 
-    function showResult(code) {
-        document.getElementById('loader').style.display = 'none';
-        document.getElementById('result-area').style.display = 'block';
-        document.getElementById('text-code').innerText = code;
-
+    function showFinal(code) {
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('final-code').innerText = code;
         JsBarcode("#barcode", code, {
             format: "CODE128",
-            width: 3,
-            height: 100,
+            width: 2.5,
+            height: 80,
             displayValue: false
         });
     }
-
-    function resetApp() {
-        document.getElementById('result-area').style.display = 'none';
-        document.getElementById('loader').style.display = 'none';
-        input.focus();
-    }
 </script>
+
 </body>
 </html>
