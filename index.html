@@ -19,7 +19,7 @@
 <body>
 
 <div class="container">
-    <h2>Promo Flash Officine</h2>
+    <h2>Promo Flash Officine V0.1</h2>
     
     <div class="input-group">
         <label>Scannez ici (ou collez l'URL opn.to) :</label>
@@ -59,33 +59,34 @@
 
     async function process(url) {
     const logStep = document.getElementById('log-step');
-    const loader = document.getElementById('loader');
-    
-    loader.style.display = 'block';
-    logStep.innerText = "Analyse en cours...";
+    document.getElementById('loader').style.display = 'block';
 
     try {
         const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`);
         const data = await response.json();
 
-        console.log("Réponse du Worker :", data);
-
-        // Sécurité : On ne boucle que si logs existe
-        if (data.logs && Array.isArray(data.logs)) {
-            data.logs.forEach(log => console.log("Worker Log:", log));
+        if (data.trace) {
+            console.log("--- TRACE DU WORKER ---");
+            data.trace.forEach(t => console.log(t));
         }
 
         if (data.code) {
-            showFinal(data.code); // Affiche le code et le code-barres
-            logStep.innerText = "Code trouvé !";
+            showFinal(data.code);
         } else {
-            logStep.innerText = data.error || "Code non détecté. Vérifiez le QR code.";
+            console.error("ÉCHEC DE L'EXTRACTION");
+            if (data.html_debug) {
+                console.log("CONTENU HTML REÇU (OPN.TO) :", data.html_debug);
+            }
+            if (data.html_final_debug) {
+                console.log("CONTENU HTML REÇU (HIGHCO) :", data.html_final_debug);
+            }
+            logStep.innerText = data.error || "Code non trouvé (voir console F12)";
         }
     } catch (err) {
-        console.error("Erreur de fetch :", err);
-        logStep.innerText = "Erreur de connexion au serveur.";
+        console.error("Erreur :", err);
+        logStep.innerText = "Erreur de connexion.";
     } finally {
-        loader.style.display = 'none';
+        document.getElementById('loader').style.display = 'none';
     }
 }
 
