@@ -58,26 +58,34 @@
     });
 
     async function process(url) {
+    const logStep = document.getElementById('log-step');
+    const loader = document.getElementById('loader');
+    
+    loader.style.display = 'block';
+    logStep.innerText = "Analyse en cours...";
+
     try {
         const response = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`);
         const data = await response.json();
 
-        // ON LOGUE TOUT ICI
-        console.log("--- DEBUG WORKER ---");
-        data.logs.forEach(log => console.log(log));
-        
-        if (data.full_html_opn) {
-            console.log("HTML COMPLET OPN.TO :", data.full_html_opn);
+        console.log("Réponse du Worker :", data);
+
+        // Sécurité : On ne boucle que si logs existe
+        if (data.logs && Array.isArray(data.logs)) {
+            data.logs.forEach(log => console.log("Worker Log:", log));
         }
 
         if (data.code) {
-            showFinal(data.code);
+            showFinal(data.code); // Affiche le code et le code-barres
+            logStep.innerText = "Code trouvé !";
         } else {
-            console.error("Échec à l'étape :", data.step);
-            if (data.debug_html_final) console.log("HTML FINAL :", data.debug_html_final);
+            logStep.innerText = data.error || "Code non détecté. Vérifiez le QR code.";
         }
     } catch (err) {
-        console.error("Erreur réseau :", err);
+        console.error("Erreur de fetch :", err);
+        logStep.innerText = "Erreur de connexion au serveur.";
+    } finally {
+        loader.style.display = 'none';
     }
 }
 
